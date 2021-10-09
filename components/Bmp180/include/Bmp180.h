@@ -10,7 +10,7 @@
 #include "esp_err.h"
 
 esp_err_t setup_i2c_master(i2c_config_t *c, uint8_t pin_scl, uint8_t pin_sda);
-void get_temp_bytes(uint8_t *data);
+uint16_t bmp180_get_ut();
 
 void get_calibration_data();
 void print_calibration_data();
