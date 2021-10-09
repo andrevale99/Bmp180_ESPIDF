@@ -20,19 +20,17 @@ void app_main(void)
 
 	i2c_config_t conf;
 	
-	esp_err_t teste = setup_i2c_master(&conf, I2C_SCL, I2C_SDA);
+	esp_err_t signal_err = setup_i2c_master(&conf, I2C_SCL, I2C_SDA);
+	printf("%s on install I2C\n\n", ((signal_err == ESP_OK)?"SUCESS":"FAIL")); 
 
 	get_calibration_data();
-	print_calibration_data();
+	//print_calibration_data();
+
+	uint16_t UT = bmp180_get_ut();
+
+	printf("UT: %i\n", UT);
+
+	fflush(stdout);
 	
-	uint16_t value = 0;
-	uint8_t data[2];
-
-	get_temp_bytes(data);
-
-	printf("0x%X \t 0x%X\n", data[0], data[1]);
-	printf("%i\n", (data[0] << 8) | data[1]);
-
-
 	return;
 }
