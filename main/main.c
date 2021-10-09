@@ -20,17 +20,11 @@ void app_main(void)
 
 	i2c_config_t conf;
 	
-	esp_err_t signal_err = setup_i2c_master(&conf, I2C_SCL, I2C_SDA);
-	printf("%s on install I2C\n\n", ((signal_err == ESP_OK)?"SUCESS":"FAIL")); 
+	esp_err_t signal_err = bmp180_begin(&conf, I2C_SCL, I2C_SDA);
+	printf("%s ao inciar o BMP180\n\n", ((signal_err == ESP_OK)?"SUCESS":"FAIL")); 
 
-	get_calibration_data();
-	//print_calibration_data();
-
-	uint16_t UT = bmp180_get_ut();
-
-	printf("UT: %i\n", UT);
-
-	fflush(stdout);
+	float T = bmp180_get_temperature();
+	printf("T = %f °C\n", T);
 	
 	return;
 }
