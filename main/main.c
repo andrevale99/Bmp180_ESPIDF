@@ -13,6 +13,7 @@
 
 #include "Bmp180.h"
 
+//Portas que serãoutilizadas pelo Protocolo I2C
 #define I2C_SCL 22
 #define I2C_SDA 21
 
@@ -32,16 +33,13 @@ void app_main(void)
 
 	float T = bmp180_get_temperature();
 
-	while(true){
-		T = bmp180_get_temperature();
-		
-		printf("%s", asctime(data));
-		printf("T = %f °C\n\n", T);
-		vTaskDelay( 1000 / portTICK_PERIOD_MS);
-
-		time(&now);
-		data = localtime(&now);
-	}
 	
+	T = bmp180_get_temperature();
+		
+	printf("%s", asctime(data));
+	printf("T = %f °C\n\n", T);
+	
+	vTaskDelay( 1000 / portTICK_PERIOD_MS);
+		
 	return;
 }
