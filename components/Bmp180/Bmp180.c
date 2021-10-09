@@ -61,7 +61,7 @@ struct BMP180_COEFS
  * @return retorna um valor inteiro para saber se deu certo ou não
 */
 
-int setup_i2c_master(i2c_config_t *c, uint8_t pin_scl, uint8_t pin_sda)
+esp_err_t setup_i2c_master(i2c_config_t *c, uint8_t pin_scl, uint8_t pin_sda)
 {
 	i2c_config_t conf = {
 		.mode = I2C_MODE_MASTER,
@@ -77,38 +77,9 @@ int setup_i2c_master(i2c_config_t *c, uint8_t pin_scl, uint8_t pin_sda)
 	return i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 
-void get_temp_bytes(uint8_t *data)
-{
-
-	i2c_cmd_handle_t cmd;
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKM);
-	i2c_master_write_byte(cmd, BMP180_START_MEASURMENT_REG, ACKM);
-	i2c_master_write_byte(cmd, BMP180_TEM_REG, ACKS);
-	i2c_master_stop(cmd);
-	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_RATE_MS);
-	i2c_cmd_link_delete(cmd);
-
-	vTaskDelay(5 / portTICK_RATE_MS);
-
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKS);
-	i2c_master_write_byte(cmd, 0xF6, ACKS);
-	i2c_master_stop(cmd);
-	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
-	i2c_cmd_link_delete(cmd);
-
-	cmd = i2c_cmd_link_create();
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_READ, ACKS);
-	i2c_master_read(cmd, data, 2, ACKM);
-	i2c_master_stop(cmd);
-	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
-	i2c_cmd_link_delete(cmd);
-}
-
+/**
+ * @brief Requisita os dados de calibração do sensor para realizar os cálculos
+*/
 void get_calibration_data()
 {
 
@@ -167,6 +138,9 @@ void get_calibration_data()
 	}
 }
 
+/**
+ * @brief função debug para visualizar os dados dos coeficientes de calibração
+*/
 void print_calibration_data(){
 	printf("AC1: %i\n", _calCoeff.bmpAC1);
 	printf("AC2: %i\n", _calCoeff.bmpAC2);
@@ -183,7 +157,13 @@ void print_calibration_data(){
 	printf("***************************************\n");
 }
 
-
+/**
+ * @brief Ler 16 bytes a partir da requisição do registrador
+ * 
+ * @param reg --> Registrador do BMP180
+ * 
+ * @return os 16 bits queforam requisitados
+*/
 /*address 0xEF (read) and 0xEE (write).*/
 uint16_t read16_bits(uint16_t reg)
 {
@@ -209,12 +189,20 @@ uint16_t read16_bits(uint16_t reg)
 	return ((data[0] << 8) | data[1]);
 }
 
+/**
+ * @brief Escreve 1 byte no sensor
+ * 
+ * @param reg --> Registrador de Comando (exp.: BMP180_START_MEASURMENT_REG 0xF4)
+ * @param control --> Registrador do que deseja (exp.: BMP180_TEM_REG 0X2E)
+ * 
+ * @return retorna o sinal de erro ou sucesso (Ver documentação da variavel "esp_err_t" na ESP-IDF)
+*/
 esp_err_t write8_bits(uint8_t reg, uint8_t control)
 {
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (BMP180_ADDR << 1), ACKM);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKM);
 	i2c_master_write_byte(cmd, reg, ACKM);
 	i2c_master_write_byte(cmd, control, ACKS);
 	i2c_master_stop(cmd);
@@ -224,27 +212,43 @@ esp_err_t write8_bits(uint8_t reg, uint8_t control)
 	return signal;
 }
 
-/*	
+
+
+
+
+/**
+ * @brief Requisita os 2 bytes da temperatura(função de debug)
+ * 
+ * @param data --> Variável onde será armazenado os bytes
+ * 
+*/
+void get_temp_bytes(uint8_t *data)
+{
 	i2c_cmd_handle_t cmd;
 	cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (BMP180_ADDR << 1), ACKM);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKM);
 	i2c_master_write_byte(cmd, BMP180_START_MEASURMENT_REG, ACKM);
 	i2c_master_write_byte(cmd, BMP180_TEM_REG, ACKS);
 	i2c_master_stop(cmd);
-	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
 
-	vTaskDelay( 5 / portTICK_RATE_MS);
+	vTaskDelay(5 / portTICK_RATE_MS);
 
 	cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_READ, ACKM);
-	i2c_master_read_byte(cmd, &data[0], ACKS);
-	i2c_master_read_byte(cmd, &data[1], ACKS);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKS);
+	i2c_master_write_byte(cmd, 0xF6, ACKS);
 	i2c_master_stop(cmd);
 	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
 
-	return ((data[0] << 8) | data[1]);
-*/
+	cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_READ, ACKS);
+	i2c_master_read(cmd, data, sizeof(data), ACKM);
+	i2c_master_stop(cmd);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_cmd_link_delete(cmd);
+}

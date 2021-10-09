@@ -9,7 +9,7 @@
 #include "sdkconfig.h"
 #include "esp_err.h"
 
-int setup_i2c_master(i2c_config_t *c, uint8_t pin_scl, uint8_t pin_sda);
+esp_err_t setup_i2c_master(i2c_config_t *c, uint8_t pin_scl, uint8_t pin_sda);
 void get_temp_bytes(uint8_t *data);
 
 void get_calibration_data();
