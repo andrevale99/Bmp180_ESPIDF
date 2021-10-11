@@ -2,7 +2,6 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <math.h>
-#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -20,26 +19,14 @@
 void app_main(void)
 {
 
-	time_t now;
-	struct tm *data;
-
-	time(&now);
-	data = localtime(&now);
-
 	i2c_config_t conf;
 	
 	esp_err_t signal_err = bmp180_begin(&conf, I2C_SCL, I2C_SDA);
 	printf("%s ao inciar o BMP180\n\n", ((signal_err == ESP_OK)?"SUCESS":"FAIL")); 
 
 	float T = bmp180_get_temperature();
-
-	
-	T = bmp180_get_temperature();
 		
-	printf("%s", asctime(data));
 	printf("T = %f °C\n\n", T);
-	
-	vTaskDelay( 1000 / portTICK_PERIOD_MS);
 		
 	return;
 }
