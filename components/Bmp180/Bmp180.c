@@ -9,13 +9,27 @@
 #define I2C_MASTER_RX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 
 #define BMP180_ADDR 0x77
+
 #define BMP180_START_MEASURMENT_REG 0xF4 //start measurment  register
-#define BMP180_TEM_REG 0x2E
+#define BMP180_READ_ADC_MSB_REG 0xF6	 //read adc msb  register
+#define BMP180_READ_ADC_LSB_REG 0xF7	 //read adc lsb  register
+#define BMP180_READ_ADC_XLSB_REG 0xF8	 //read adc xlsb register
+
+/* BMP180_START_MEASURMENT_REG controls */
+#define BMP180_GET_TEMPERATURE_CTRL 0x2E   //get temperature control
+#define BMP180_GET_PRESSURE_OSS0_CTRL 0x34 //get pressure oversampling 1 time/oss0 control
+#define BMP180_GET_PRESSURE_OSS1_CTRL 0x74 //get pressure oversampling 2 time/oss1 control
+#define BMP180_GET_PRESSURE_OSS2_CTRL 0xB4 //get pressure oversampling 4 time/oss2 control
+#define BMP180_GET_PRESSURE_OSS3_CTRL 0xF4 //get pressure oversampling 8 time/oss3 control
 
 #define ACKM 1
 #define ACKS 0
 
 //=============================VARIÁVEIS=====================================
+
+uint8_t resolution = 0;
+uint8_t regControl = 0;
+float resolution_convTIME = 0;
 
 enum COEFS
 {
@@ -30,6 +44,14 @@ enum COEFS
 	BMP180_CAL_MB_REG = 0xBA,  //mb
 	BMP180_CAL_MC_REG = 0xBC,  //mc  temperature computation
 	BMP180_CAL_MD_REG = 0xBE   //md  temperature computation
+};
+
+enum MODES
+{
+	BMP180_ULTRALOWPOWER = 0x00, //low power             mode, oss0
+	BMP180_STANDARD = 0x01,		 //standard              mode, oss1
+	BMP180_HIGHRES = 0x02,		 //high resolution       mode, oss2
+	BMP180_ULTRAHIGHRES = 0x03	 //ultra high resolution mode, oss3
 };
 
 struct BMP180_COEFS
@@ -74,11 +96,13 @@ esp_err_t bmp180_begin(i2c_config_t *c, uint8_t pin_scl, uint8_t pin_sda)
 
 	esp_err_t signal = i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
 
-	if(signal == ESP_OK){
+	if (signal == ESP_OK)
+	{
 		get_calibration_data();
 		return ESP_OK;
 	}
-	else return ESP_FAIL;
+	else
+		return ESP_FAIL;
 }
 
 /**
@@ -143,6 +167,58 @@ void get_calibration_data()
 }
 
 /**
+ * CASO N SEJA NENHUM DOS MODOS, SERÁ ESCOLHIDO O PADRÃO
+ * 
+ * @brief Configura o mode de operação do BMP180
+*/
+void set_mode_oversampling(uint8_t mode)
+{
+	switch (mode)
+	{
+	case BMP180_ULTRALOWPOWER:
+	{
+		regControl = BMP180_GET_PRESSURE_OSS0_CTRL;
+		resolution = BMP180_ULTRALOWPOWER;
+		resolution_convTIME = 5;
+	}
+	break;
+
+	case BMP180_STANDARD:
+	{
+		regControl = BMP180_GET_PRESSURE_OSS1_CTRL;
+		resolution = BMP180_STANDARD;
+		resolution_convTIME = 8;
+	}
+	break;
+
+	case BMP180_HIGHRES:
+	{
+		regControl = BMP180_GET_PRESSURE_OSS2_CTRL;
+		resolution = BMP180_HIGHRES;
+		resolution_convTIME = 14;
+	}
+	break;
+
+	case BMP180_ULTRAHIGHRES:
+	{
+		regControl = BMP180_GET_PRESSURE_OSS3_CTRL;
+		resolution = BMP180_ULTRAHIGHRES;
+		resolution_convTIME = 26;
+	}
+	break;
+
+	default:
+	{
+		printf("\'MODE\' NAO ENCONTRADO\nDEFININDO COMO: STANDARD (0X01)\n");
+		regControl = BMP180_GET_PRESSURE_OSS1_CTRL;
+		resolution = BMP180_STANDARD;
+		resolution_convTIME = 8;
+	}
+	break;
+	}
+}
+
+/**
  * @brief função debug para visualizar os dados dos coeficientes de calibração
 */
 void print_calibration_data()
@@ -170,7 +246,7 @@ void print_calibration_data()
  * @return UT
  * 
 */
-uint32_t bmp180_get_ut()
+int32_t bmp180_get_ut()
 {
 	uint8_t data[2];
 
@@ -179,7 +255,7 @@ uint32_t bmp180_get_ut()
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKS);
 	i2c_master_write_byte(cmd, BMP180_START_MEASURMENT_REG, ACKS);
-	i2c_master_write_byte(cmd, BMP180_TEM_REG, ACKS);
+	i2c_master_write_byte(cmd, BMP180_GET_TEMPERATURE_CTRL, ACKS);
 	i2c_master_stop(cmd);
 	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
@@ -189,23 +265,21 @@ uint32_t bmp180_get_ut()
 	cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKS);
-	i2c_master_write_byte(cmd, 0xF6, ACKS);
+	i2c_master_write_byte(cmd, BMP180_READ_ADC_MSB_REG, ACKS);
 	i2c_master_stop(cmd);
-	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
 
 	cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
 	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_READ, ACKS);
-
-	i2c_master_read_byte(cmd, &data[0], ACKM);
+	i2c_master_read_byte(cmd, &data[0], ACKS);
 	i2c_master_read_byte(cmd, &data[1], ACKM);
 	i2c_master_stop(cmd);
-	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
 
-	//printf("DATA: %X|%i \t %X|%i\n", data[0], data[0], data[1], data[1]);
-	//printf("%X\t%i\n\n", ((data[0] << 8) | data[1]), ((data[0] << 8) | data[1]));
+	//printf("DATA: %X \t %X\n", data[0], data[1]);
 
 	return ((data[0] << 8) | data[1]);
 }
@@ -216,9 +290,66 @@ uint32_t bmp180_get_ut()
  * @return UP
  * 
 */
-uint32_t bmp180_get_up(){
+int32_t bmp180_get_up()
+{
+	uint8_t data[3];
 
-	return 0;
+	i2c_cmd_handle_t cmd;
+	cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKS);
+	i2c_master_write_byte(cmd, BMP180_START_MEASURMENT_REG, ACKS);
+	i2c_master_write_byte(cmd, regControl, ACKS);
+	i2c_master_stop(cmd);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_RATE_MS);
+	i2c_cmd_link_delete(cmd);
+
+	vTaskDelay(resolution_convTIME / portTICK_PERIOD_MS);
+
+	cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKS);
+	i2c_master_write_byte(cmd, BMP180_READ_ADC_MSB_REG, ACKS);
+	i2c_master_stop(cmd);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_cmd_link_delete(cmd);
+
+	cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_READ, ACKS);
+	i2c_master_read_byte(cmd, &data[0], ACKS);
+	i2c_master_read_byte(cmd, &data[1], ACKM);
+	i2c_master_stop(cmd);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_cmd_link_delete(cmd);
+
+	cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_WRITE, ACKS);
+	i2c_master_write_byte(cmd, BMP180_READ_ADC_XLSB_REG, ACKS);
+	i2c_master_stop(cmd);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_cmd_link_delete(cmd);
+
+	cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (BMP180_ADDR << 1) | I2C_MASTER_READ, ACKS);
+	i2c_master_read_byte(cmd, &data[2], ACKM);
+	i2c_master_stop(cmd);
+	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+	i2c_cmd_link_delete(cmd);
+
+	//printf("DATA: %X \t %X\t %X\n", data[0], data[1], data[2]);
+	//printf("0x%X\n", (((data[0] << 8) | (data[1]))<<8) | data[2] );
+
+	uint32_t value = ((((data[0] << 8) | (data[1]))<<8) | data[2]);
+
+	value >>= (8 - resolution);
+	//printf("0x%X\n",  value >> (8 - resolution));
+	//printf("VALUE: 0x%X\n\n",  value);
+
+	return value;
+
 }
 
 /**
@@ -226,12 +357,13 @@ uint32_t bmp180_get_up(){
  * 
  * @return B5
 */
-uint32_t calcB5(){
-	uint32_t UT = bmp180_get_ut();
+int32_t calcB5()
+{
+	int32_t UT = bmp180_get_ut();
 
-	uint32_t x1 = (UT - _calCoeff.bmpAC6) * _calCoeff.bmpAC5 / pow(2, 15);
-	uint32_t x2 = _calCoeff.bmpMC * pow(2, 11) / (x1 + _calCoeff.bmpMD);
-	return (x1+x2);
+	int32_t x1 = (UT - _calCoeff.bmpAC6) * _calCoeff.bmpAC5 / pow(2, 15);
+	int32_t x2 = _calCoeff.bmpMC * pow(2, 11) / (x1 + _calCoeff.bmpMD);
+	return (x1 + x2);
 }
 
 /**
@@ -248,6 +380,36 @@ float bmp180_get_temperature()
 	float b5 = calcB5();
 
 	return ((b5 + 8) / pow(2, 4) * 0.1);
+}
+
+float bmp180_get_pressure(){
+	float pressure = 0;
+
+	int32_t UP = bmp180_get_up();
+
+	int32_t b6 = (int32_t)calcB5() - 4000;
+	int32_t x1 = ((int32_t)_calCoeff.bmpB2 * (b6*b6 / pow(2, 12))) / pow(2, 11);
+	int32_t x2 = (int32_t)_calCoeff.bmpAC2 * b6 / pow(2, 11);
+	int32_t x3 = x1 + x2;
+	int32_t b3 = ((((int32_t)_calCoeff.bmpAC1 * 4+x3)<< resolution) + 2) /4;
+	
+	x1 = (int32_t)_calCoeff.bmpAC3 * b6 / pow(2, 13);
+	x2 = ((int32_t)_calCoeff.bmpB1 * (b6* b6/ pow(2, 12))) / pow(2, 16);
+	x3 = ((x1 + x2)+2) / 4;
+
+	uint32_t b4 = (uint32_t)_calCoeff.bmpAC4 * (x3 + 32768L) / pow(2, 15);
+	uint32_t b7 = ((unsigned long)UP - b3) * (50000UL >> resolution);
+
+	if   (b7 < 0x80000000) pressure = (b7 * 2) / b4;
+    else                   pressure = (b7 / b4) * 2;
+
+	x1 = pow((pressure / 256), 2);
+  	x1 = (x1 * 3038L) / pow(2, 16);
+  	x2 = (-7357L * pressure) / pow(2, 16);
+
+	pressure = pressure + ((x1 + x2 + 3791L) / pow(2, 4));
+
+	return pressure;
 }
 
 //==========================================================================================================================
