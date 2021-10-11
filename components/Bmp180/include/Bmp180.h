@@ -15,6 +15,8 @@ void get_calibration_data();
 void print_calibration_data();
 
 uint32_t bmp180_get_ut();
+uint32_t bmp180_get_up();
+uint32_t calcB5();
 float bmp180_get_temperature();
 
 uint16_t read16_bits(uint16_t reg);

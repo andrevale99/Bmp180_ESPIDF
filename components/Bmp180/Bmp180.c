@@ -165,9 +165,9 @@ void print_calibration_data()
 }
 
 /**
- * @brief Requisita os 2 bytes da temperatura(função de debug)
+ * @brief Requisita o valor de UT especificado no datasheet
  * 
- * @param data --> Variável onde será armazenado os bytes
+ * @return UT
  * 
 */
 uint32_t bmp180_get_ut()
@@ -184,7 +184,7 @@ uint32_t bmp180_get_ut()
 	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 50 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
 
-	vTaskDelay(5 / portTICK_RATE_MS);
+	vTaskDelay(5 / portTICK_PERIOD_MS);
 
 	cmd = i2c_cmd_link_create();
 	i2c_master_start(cmd);
@@ -200,12 +200,38 @@ uint32_t bmp180_get_ut()
 
 	i2c_master_read_byte(cmd, &data[0], ACKM);
 	i2c_master_read_byte(cmd, &data[1], ACKM);
-
 	i2c_master_stop(cmd);
 	i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
 	i2c_cmd_link_delete(cmd);
 
+	//printf("DATA: %X|%i \t %X|%i\n", data[0], data[0], data[1], data[1]);
+	//printf("%X\t%i\n\n", ((data[0] << 8) | data[1]), ((data[0] << 8) | data[1]));
+
 	return ((data[0] << 8) | data[1]);
+}
+
+/**
+ * @brief Requisita o valor de UP especificado no datasheet
+ * 
+ * @return UP
+ * 
+*/
+uint32_t bmp180_get_up(){
+
+	return 0;
+}
+
+/**
+ * @brief Computa o valor de B5 
+ * 
+ * @return B5
+*/
+uint32_t calcB5(){
+	uint32_t UT = bmp180_get_ut();
+
+	uint32_t x1 = (UT - _calCoeff.bmpAC6) * _calCoeff.bmpAC5 / pow(2, 15);
+	uint32_t x2 = _calCoeff.bmpMC * pow(2, 11) / (x1 + _calCoeff.bmpMD);
+	return (x1+x2);
 }
 
 /**
@@ -219,11 +245,7 @@ uint32_t bmp180_get_ut()
 */
 float bmp180_get_temperature()
 {
-	uint32_t UT = bmp180_get_ut();
-
-	float x1 = (UT - _calCoeff.bmpAC6) * _calCoeff.bmpAC5 / pow(2, 15);
-	float x2 = _calCoeff.bmpMC * pow(2, 11) / (x1 + _calCoeff.bmpMD);
-	float b5 = x1 + x2;
+	float b5 = calcB5();
 
 	return ((b5 + 8) / pow(2, 4) * 0.1);
 }
