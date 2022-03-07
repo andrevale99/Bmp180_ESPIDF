@@ -1,5 +1,5 @@
-# Biblioteca para o sensor BMP180
-Algoritmo para requisitar dados de pressão e temperatura do sensor BMP180 utilizando as funções da [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#). 
+# Biblioteca para o sensor BMP180 (possui erros na aquisição)
+Algoritmo para requisitar dados de pressão e temperatura do sensor BMP180 utilizando as funções da [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#).
 
 
 
